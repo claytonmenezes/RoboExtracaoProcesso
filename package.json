@@ -1,0 +1,27 @@
+{
+  "name": "roboprocesso",
+  "version": "1.0.0",
+  "description": "Robo responsavem por  entrar no site e atualizar os processos",
+  "main": "index.js",
+  "scripts": {
+    "build": "babel src --out-dir dist",
+    "babel-node": "babel-node src/index.js",
+    "dev": "nodemon --exec npm run babel-node",
+    "start": "node dist/index.js"
+  },
+  "author": "Clayton Menezes",
+  "license": "MIT",
+  "dependencies": {
+    "consign": "^0.1.6",
+    "express": "^4.17.1",
+    "html-to-image": "^0.1.1",
+    "selenium-webdriver": "^4.0.0-alpha.5"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.4.4",
+    "@babel/core": "^7.4.5",
+    "@babel/node": "^7.4.5",
+    "@babel/preset-env": "^7.4.5",
+    "nodemon": "^1.19.1"
+  }
+}
