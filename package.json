@@ -12,9 +12,9 @@
   "author": "Clayton Menezes",
   "license": "MIT",
   "dependencies": {
+    "canvas": "^2.6.1",
     "consign": "^0.1.6",
     "express": "^4.17.1",
-    "html-to-image": "^0.1.1",
     "selenium-webdriver": "^4.0.0-alpha.5"
   },
   "devDependencies": {
