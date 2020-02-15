@@ -1,10 +1,11 @@
 import {Builder, By, Key, util} from 'selenium-webdriver'
+import humanCoder from "./humanCoder"
 
 export default {
   async start () {
     let driver = await new Builder().forBrowser('chrome').build()
     await driver.get('https://sistemas.anm.gov.br/SCM/site/admin/dadosProcesso.aspx')
-    return driver.executeScript(script)
+    humanCoder.base64ToCaptcha(await driver.executeScript(script))
   }
 }
 const script = "var canvas = document.createElement('canvas'); "+

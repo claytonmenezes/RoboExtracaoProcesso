@@ -12,6 +12,7 @@
   "author": "Clayton Menezes",
   "license": "MIT",
   "dependencies": {
+    "axios": "^0.19.2",
     "consign": "^0.1.6",
     "express": "^4.17.1",
     "selenium-webdriver": "^4.0.0-alpha.5"
