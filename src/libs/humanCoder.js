@@ -1,16 +1,21 @@
 import axios from "axios"
-import utils from "./utils"
+import qs from "querystring"
 
 export default {
   base64ToCaptcha (base64) {
-    axios({
+    return axios({
       method: 'post',
-      url: 'http://fasttypers.org/imagepost.ashx',
+      url: 'http://api.captchaboss.com/Imagepost.ashx',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: 'action=upload&vendorkey=&key=2HUGEOST8697U7MKMSJ8A8PFR33OEYWLQ2GPOLCK&file='+base64+'&gen_task_id=' + utils.random()
+      data: qs.stringify({
+        action: 'upload',
+        vendorkey: '',
+        key: '2HUGEOST8697U7MKMSJ8A8PFR33OEYWLQ2GPOLCK',
+        file: base64,
+        gen_task_id: 42
+      })
     }).then(response => {
-      console.log(response)
+      return response.data
     })
-    return
   }
 }

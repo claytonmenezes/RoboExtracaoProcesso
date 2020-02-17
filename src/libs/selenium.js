@@ -5,7 +5,13 @@ export default {
   async start () {
     let driver = await new Builder().forBrowser('chrome').build()
     await driver.get('https://sistemas.anm.gov.br/SCM/site/admin/dadosProcesso.aspx')
-    humanCoder.base64ToCaptcha(await driver.executeScript(script))
+    let base64 = await driver.executeScript(script)
+    let captcha = await humanCoder.base64ToCaptcha(base64)
+    this.entrarPagina(driver, captcha)
+  },
+  entrarPagina (driver, captcha) {
+    var txtNumeroProcesso = driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input'))
+    txtNumeroProcesso.sendKeys(captcha)
   }
 }
 const script = "var canvas = document.createElement('canvas'); "+
