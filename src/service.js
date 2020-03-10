@@ -1,8 +1,8 @@
 var Service = require('node-windows').Service
 
 var svc = new Service({
-    name:'Agilus ShortLink',
-    description: 'Encurtador de Links',
+    name:'Robo Extração Processo',
+    description: '',
     script: __dirname + '/index.js'
 })
 
