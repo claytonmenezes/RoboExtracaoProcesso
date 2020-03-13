@@ -18,17 +18,18 @@ export default {
         for (let processo of processosAtualizar) {
           console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
           let captcha = await this.pegaCaptcha()
+          await this.abrirProcesso(processo.NumeroProcesso, captcha)
           try {
-            await this.abrirProcesso(processo.NumeroProcesso, captcha)
             let atualizacao = await this.pegaAtualizacao(processo)
             let processoAtualizado = await http.atualizar(atualizacao)
             atualizacoes.push(processoAtualizado)
             console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
             console.log('------------------------------------------------------------------------------------------------------')
-            await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
-            await this.esperaSpinner()
           } catch (error) {
             if (error === "TypeError: Cannot read property 'Id' of null") {
+              console.log('Erro na atualização do processo N° ' + processo.NumeroProcesso)
+              console.log('Erro ' + error)
+              console.log('Tentando Reprocessar')
               let atualizacao = await this.pegaAtualizacao(processo)
               let processoAtualizado = await http.atualizar(atualizacao)
               atualizacoes.push(processoAtualizado)
@@ -39,9 +40,8 @@ export default {
               console.log('Erro ' + error)
               console.log('------------------------------------------------------------------------------------------------------')
             }
-            await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
-            await this.esperaSpinner()
           }
+          await this.fecharProcesso()
         }
       } else {
         console.log('Não foram encontrados processos para atualização')
@@ -63,6 +63,10 @@ export default {
   async abrirProcesso (numeroProcesso, captcha) {
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(numeroProcesso)
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).sendKeys(captcha)
+    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
+    await this.esperaSpinner()
+  },
+  async fecharProcesso () {
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
     await this.esperaSpinner()
   },
