@@ -1,64 +1,140 @@
 import {Builder, By, Key, until} from 'selenium-webdriver'
 import humanCoder from "./humanCoder"
 import http from "./http"
+import utils from './utils'
+
 let driver = null
+let atualizacoes = []
 
 export default {
   async start () {
-    console.log(await this.trataEventos('Descrição Data\n922 - REG EXT/REGISTRO DE EXTRAÇÃO 03 ANOS PUBLICADO 26/07/2016\n829 - REQ EXT/CUMPRIMENTO DE EXIGÊNCIA PROTOCOLIZADA 14/06/2016\n825 - REQ EXT/EXIGÊNCIA COM PRAZO DE 30 DIAS PUBLICADA 03/06/2016\n1404 - REQ EXT/LICENÇA AMBIENTAL PROTOCOLIZADA 11/03/2016\n1881 - REQ EXT/DOCUMENTO DIVERSO PROTOCOLIZADO 29/09/2015\n820 - REQ EXT/REQUERIMENTO PROTOCOLIZADO 29/09/2015'))
-    // let atualizacoes = []
-    // driver = new Builder().forBrowser('chrome').build()
-    // try {
-    //   await driver.get('https://sistemas.anm.gov.br/SCM/site/admin/dadosProcesso.aspx')
-    //   let processosAtualizar = await http.pegaProcessosParaAtualizar().then(response => {return response.data})
-    //   atualizacoes.push(await this.pegaAtualizacao(processosAtualizar[1].NumeroProcesso))
-    //   // processosAtualizar.forEach(async processo => {
-    //   //   atualizacoes.push(await this.pegaAtualizacao(processo.NumeroProcesso))
-    //   // })
-    //   console.log(atualizacoes)
-    // }
-    // finally {
-    //   await driver.quit();
-    //   driver = null
-    // }
+    driver = new Builder().forBrowser('chrome').build()
+    try {
+      await driver.get('https://sistemas.anm.gov.br/SCM/site/admin/dadosProcesso.aspx')
+      let processosAtualizar = await http.pegaProcessosParaAtualizar()
+      if (processosAtualizar.length) {
+        console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
+        console.log('------------------------------------------------------------------------------------------------------')
+        for (let processo of processosAtualizar) {
+          console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
+          let captcha = await this.pegaCaptcha()
+          try {
+            await this.abrirProcesso(processo.NumeroProcesso, captcha)
+            let atualizacao = await this.pegaAtualizacao(processo)
+            let processoAtualizado = await http.atualizar(atualizacao)
+            atualizacoes.push(processoAtualizado)
+            console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
+            console.log('------------------------------------------------------------------------------------------------------')
+            await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
+            await this.esperaSpinner()
+          } catch (error) {
+            if (error === "TypeError: Cannot read property 'Id' of null") {
+              let atualizacao = await this.pegaAtualizacao(processo)
+              let processoAtualizado = await http.atualizar(atualizacao)
+              atualizacoes.push(processoAtualizado)
+              console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
+              console.log('------------------------------------------------------------------------------------------------------')
+            } else {
+              console.log('Erro na atualização do processo N° ' + processo.NumeroProcesso)
+              console.log('Erro ' + error)
+              console.log('------------------------------------------------------------------------------------------------------')
+            }
+            await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
+            await this.esperaSpinner()
+          }
+        }
+      } else {
+        console.log('Não foram encontrados processos para atualização')
+      }
+      console.log(atualizacoes.length + ' atualizado(s)')
+      return atualizacoes
+    }
+    finally {
+      await driver.quit();
+      driver = null
+      atualizacoes = []
+      console.log('Atualizações finalizadas')
+    }
   },
-  async pegaAtualizacao (numeroProcesso) {
-    let atualizacao
+  async pegaCaptcha () {
     let base64 = await driver.executeScript(script)
-    let captcha = await humanCoder.base64ToCaptcha(base64)
+    return await humanCoder.base64ToCaptcha(base64)
+  },
+  async abrirProcesso (numeroProcesso, captcha) {
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(numeroProcesso)
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).sendKeys(captcha)
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
+    await this.esperaSpinner()
+  },
+  async pegaAtualizacao (processo) {
+    return {
+      Id: processo.Id,
+      NumeroProcesso: processo.NumeroProcesso,
+      Atualizar: false,
+      UF: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUF"]')).getText(),
+      Nup: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNup"]')).getText(),
+      Area: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText(),
+      Ativo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblAtivo"]')).getText() === 'Sim' ? true : false,
+      FaseId: await this.fasesPorNome(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoFase"]')).getText()),
+      Eventos: await this.trataEventos(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]')).getText(), processo),
+      DataProtocolo: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataProtocolo"]')).getText()),
+      DataPrioridade: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataPrioridade"]')).getText()),
+      Superintendencia: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDistrito"]')).getText(),
+      TipoRequerimento: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoRequerimento"]')).getText(),
+      NumeroCadastroEmpresa: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNumeroProcessoCadastroEmpresa"]')).getText(),
+      UnidadeProtocolizadora: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUnidadeProtocolizadora"]')).getText()
+    }
+  },
+  async fasesPorNome (faseAtual) {
+    let fase = await http.fasesPorNome(faseAtual)
+    return fase.Id
+  },
+  async tipoEventoPorCodEvento (codigo) {
+    return await http.tipoEventoPorCodEvento(codigo)
+  },
+  async trataEventos (elEventos, processo) {
+    let eventos = []
+    let retorno = []
+    let stringEventos = elEventos.substring(elEventos.indexOf('\n') + '\n'.length)
+    while (stringEventos.length > 0) {
+      let codigo
+      let descricao
+      let data
+      codigo = stringEventos.substring(0, stringEventos.indexOf(' - ', 0))
+      stringEventos = stringEventos.substring(codigo.length + stringEventos.indexOf(' - ', 0))
+      if (stringEventos.indexOf('\n') > 0) {
+        descricao = stringEventos.substring(0, stringEventos.indexOf('\n') - 11)
+        stringEventos = stringEventos.substring(descricao.length + 1)
+        data = stringEventos.substring(0, stringEventos.indexOf('\n'))
+        stringEventos = stringEventos.substring(stringEventos.indexOf('\n')  + '\n'.length)
+      } else {
+        descricao = stringEventos.substring(0, stringEventos.length - 11)
+        stringEventos = stringEventos.substring(descricao.length + 1)
+        data = stringEventos.substring(0, stringEventos.length)
+        stringEventos = stringEventos.substring(stringEventos.length  + '\n'.length)
+      }
+      eventos.push({
+        codigo,
+        descricao,
+        data
+      })
+    }
+    for (let evento of eventos) {
+      let tipoEvento = await this.tipoEventoPorCodEvento(evento.codigo)
+      if (tipoEvento) {
+        retorno.push({
+          ProcessoId: processo.Id,
+          TipoEventoId: tipoEvento ? tipoEvento.Id : null,
+          Data: await utils.formataData(evento.data)
+        })
+      }
+    }
+    return retorno
+  },
+  async esperaSpinner () {
     let spinner = await driver.findElement(By.xpath('//*[@id="ctl00_upCarregando"]'))
     await driver.wait(until.elementIsVisible(spinner))
     await driver.wait(until.elementIsNotVisible(spinner))
-    atualizacao = {
-      NumeroCadastroEmpresa: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNumeroProcessoCadastroEmpresa"]')).getText(),
-      Nup: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNup"]')).getText(),
-      Area: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText(),
-      TipoRequerimento: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoRequerimento"]')).getText(),
-      Ativo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblAtivo"]')).getText(),
-      Superintendencia: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDistrito"]')).getText(),
-      UF: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUF"]')).getText(),
-      UnidadeProtocolizadora: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUnidadeProtocolizadora"]')).getText(),
-      DataProtocolo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataProtocolo"]')).getText(),
-      DataPrioridade: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataPrioridade"]')).getText(),
-      FaseId: await this.pegaIdFaseAtual(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoFase"]')).getText()),
-      Eventos: await this.trataEventos(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]')).getText()),
-      Atualizar: false
-    }
-    return atualizacao
-  },
-  async pegaIdFaseAtual (faseAtual) {
-    let fases = await http.listarFases().then(response => {return response.data})
-    return fases.find(fase => fase.Nome.toLowerCase() === faseAtual.toLowerCase()).Id
-  },
-  async trataEventos (elEventos) {
-    let eventos = []
-    for(let i = 0; i <= elEventos.length; i++) {
-      console.log(elEventos[i])
-    }
-    // return elEventos.substring(elEventos.indexOf('\n', 0) + 1, elEventos.indexOf('-', 0) - 1)
   }
 }
 const script = "var canvas = document.createElement('canvas'); "+
