@@ -16,32 +16,10 @@ export default {
         console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
         console.log('------------------------------------------------------------------------------------------------------')
         for (let processo of processosAtualizar) {
-          console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
-          let captcha = await this.pegaCaptcha()
-          await this.abrirProcesso(processo.NumeroProcesso, captcha)
-          try {
-            let atualizacao = await this.pegaAtualizacao(processo)
-            let processoAtualizado = await http.atualizar(atualizacao)
-            atualizacoes.push(processoAtualizado)
-            console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
-            console.log('------------------------------------------------------------------------------------------------------')
-          } catch (error) {
-            if (error === "TypeError: Cannot read property 'Id' of null") {
-              console.log('Erro na atualização do processo N° ' + processo.NumeroProcesso)
-              console.log('Erro ' + error)
-              console.log('Tentando Reprocessar')
-              let atualizacao = await this.pegaAtualizacao(processo)
-              let processoAtualizado = await http.atualizar(atualizacao)
-              atualizacoes.push(processoAtualizado)
-              console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
-              console.log('------------------------------------------------------------------------------------------------------')
-            } else {
-              console.log('Erro na atualização do processo N° ' + processo.NumeroProcesso)
-              console.log('Erro ' + error)
-              console.log('------------------------------------------------------------------------------------------------------')
-            }
-          }
+          await this.abrirProcesso(processo.NumeroProcesso)
+          await this.atualizarProcesso(processo)
           await this.fecharProcesso()
+          console.log('------------------------------------------------------------------------------------------------------')
         }
       } else {
         console.log('Não foram encontrados processos para atualização')
@@ -56,11 +34,36 @@ export default {
       console.log('Atualizações finalizadas')
     }
   },
+  async atualizarProcesso (processo) {
+    try {
+      await this.atualizar(processo)
+    } catch (error) {
+      console.log('Erro na atualização do processo N° ' + processo.NumeroProcesso)
+      console.log('Erro: ' + error.message)
+      if (error.message === "Cannot read property 'Id' of null") {
+        console.log('Tentando Novamente')
+        await this.tentarNovamente(processo)
+      }
+    }
+  },
+  async tentarNovamente (processo) {
+    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).clear()
+    await this.abrirProcesso(processo.NumeroProcesso)
+    await this.atualizarProcesso(processo)
+  },
+  async atualizar (processo) {
+    console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
+    let atualizacao = await this.pegaAtualizacao(processo)
+    let processoAtualizado = await http.atualizarBanco(atualizacao)
+    atualizacoes.push(processoAtualizado)
+    console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
+  },
   async pegaCaptcha () {
     let base64 = await driver.executeScript(script)
     return await humanCoder.base64ToCaptcha(base64)
   },
-  async abrirProcesso (numeroProcesso, captcha) {
+  async abrirProcesso (numeroProcesso) {
+    let captcha = await this.pegaCaptcha()
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(numeroProcesso)
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).sendKeys(captcha)
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()

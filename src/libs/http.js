@@ -21,7 +21,7 @@ export default {
       params: {codigo: codigo}
     }).then(response => {return response.data})
   },
-  atualizar (atualizacao) {
+  atualizarBanco (atualizacao) {
     return axios({
       method: 'put',
       url: 'http://localhost:59420/api/Processo/Alterar',
