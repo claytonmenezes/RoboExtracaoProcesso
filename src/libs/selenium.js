@@ -16,7 +16,7 @@ export default {
         console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
         console.log('------------------------------------------------------------------------------------------------------')
         for (let processo of processosAtualizar) {
-          await this.abrirProcesso(processo.NumeroProcesso)
+          await this.abrirProcesso(processo)
           await this.atualizarProcesso(processo)
           await this.fecharProcesso()
           console.log('------------------------------------------------------------------------------------------------------')
@@ -48,30 +48,53 @@ export default {
   },
   async tentarNovamente (processo) {
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).clear()
-    await this.abrirProcesso(processo.NumeroProcesso)
+    await this.abrirProcesso(processo)
     await this.atualizarProcesso(processo)
   },
   async atualizar (processo) {
     console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
     let atualizacao = await this.pegaAtualizacao(processo)
+    console.log('pegando atualização')
     let processoAtualizado = await http.atualizarBanco(atualizacao)
+    console.log('Atualizando no banco de dados')
     atualizacoes.push(processoAtualizado)
+    console.log('push em atualizações')
     console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
   },
   async pegaCaptcha () {
     let base64 = await driver.executeScript(script)
     return await humanCoder.base64ToCaptcha(base64)
   },
-  async abrirProcesso (numeroProcesso) {
+  async abrirProcesso (processo) {
+    console.log('pegando o captcha')
     let captcha = await this.pegaCaptcha()
-    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(numeroProcesso)
+    console.log('Captcha: ' + captcha)
+    console.log('inserindo valor no input de processo')
+    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(processo.NumeroProcesso)
+    console.log('inserindo valor no input de captcha')
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).sendKeys(captcha)
+    await driver.sleep(1000)
+    console.log('Clicando na consulta')
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
-    await this.esperaSpinner()
+    await driver.sleep(1000)
+    if (await this.verificaSpinnerVisivel()) {
+      console.log('Esperando o spinner')
+      await this.esperaSpinner()
+    }
+    if (!await this.verificaInputPoligonalExiste()) {
+      console.log('Tentando novamente')
+      await this.tentarNovamente(processo)
+    }
   },
   async fecharProcesso () {
+    await driver.sleep(1000)
+    console.log('Clicando na nova consulta')
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
-    await this.esperaSpinner()
+    await driver.sleep(1000)
+    if (await this.verificaSpinnerVisivel()) {
+      console.log('Esperando o spinner')
+      await this.esperaSpinner()
+    }
   },
   async pegaAtualizacao (processo) {
     return {
@@ -142,6 +165,30 @@ export default {
     let spinner = await driver.findElement(By.xpath('//*[@id="ctl00_upCarregando"]'))
     await driver.wait(until.elementIsVisible(spinner))
     await driver.wait(until.elementIsNotVisible(spinner))
+  },
+  // async inputPoligonalHabilitado () {
+  //   await driver.wait(until.elementLocated(By.xpath('//*[@id="ctl00_conteudo_btnPoligonal"]')))
+  // },
+  // async inputPoligonalDesabilitado () {
+  //   await driver.wait(() => {
+  //     return driver.findElements(By.xpath('//*[@id="ctl00_conteudo_btnPoligonal"]')).then((elements) => {
+  //       if (elements.length <= 0) {
+  //         return true
+  //       }
+  //       return false
+  //     })
+  //   })
+  // },
+  async verificaInputPoligonalExiste () {
+    return driver.findElements(By.xpath('//*[@id="ctl00_conteudo_btnPoligonal"]')).then((els) => {
+      if (els.length > 0) {
+        return true
+      }
+      return false
+    })
+  },
+  async verificaSpinnerVisivel () {
+    return driver.findElement(By.xpath('//*[@id="ctl00_upCarregando"]')).isDisplayed()
   }
 }
 const script = "var canvas = document.createElement('canvas'); "+
