@@ -8,7 +8,7 @@ let atualizacoes = []
 
 export default {
   async start () {
-    driver = new Builder().forBrowser('chrome').build()
+    driver = new Builder().forBrowser('chrome').usingServer('http://localhost:8090/wd/hub').build()
     try {
       await driver.get('https://sistemas.anm.gov.br/SCM/site/admin/dadosProcesso.aspx')
       let processosAtualizar = await http.pegaProcessosParaAtualizar()
@@ -106,7 +106,8 @@ export default {
       Area: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText(),
       Ativo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblAtivo"]')).getText() === 'Sim' ? true : false,
       FaseId: await this.fasesPorNome(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoFase"]')).getText()),
-      Eventos: await this.trataEventos(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]')).getText(), processo),
+      Eventos: await this.trataEventos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]/tbody/tr')), processo),
+      PessoasRelacionadas: await this.tratarPessoasRelacionadas(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridPessoas"]/tbody/tr')), processo),
       DataProtocolo: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataProtocolo"]')).getText()),
       DataPrioridade: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataPrioridade"]')).getText()),
       Superintendencia: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDistrito"]')).getText(),
@@ -119,43 +120,40 @@ export default {
     let fase = await http.fasesPorNome(faseAtual)
     return fase.Id
   },
-  async tipoEventoPorCodEvento (codigo) {
-    return await http.tipoEventoPorCodEvento(codigo)
-  },
-  async trataEventos (elEventos, processo) {
-    let eventos = []
+  async trataEventos (elsEventos, processo) {
     let retorno = []
-    let stringEventos = elEventos.substring(elEventos.indexOf('\n') + '\n'.length)
-    while (stringEventos.length > 0) {
-      let codigo
-      let descricao
-      let data
-      codigo = stringEventos.substring(0, stringEventos.indexOf(' - ', 0))
-      stringEventos = stringEventos.substring(codigo.length + stringEventos.indexOf(' - ', 0))
-      if (stringEventos.indexOf('\n') > 0) {
-        descricao = stringEventos.substring(0, stringEventos.indexOf('\n') - 11)
-        stringEventos = stringEventos.substring(descricao.length + 1)
-        data = stringEventos.substring(0, stringEventos.indexOf('\n'))
-        stringEventos = stringEventos.substring(stringEventos.indexOf('\n')  + '\n'.length)
-      } else {
-        descricao = stringEventos.substring(0, stringEventos.length - 11)
-        stringEventos = stringEventos.substring(descricao.length + 1)
-        data = stringEventos.substring(0, stringEventos.length)
-        stringEventos = stringEventos.substring(stringEventos.length  + '\n'.length)
+    for (let el of elsEventos) {
+      let tds = await el.findElements(By.tagName('TD'))
+      if (tds.length) {
+        let descricao = await tds[0]?.getText()
+        let codigo = descricao.substring(0, descricao.indexOf(' - ', 0))
+        let data = await tds[1]?.getText()
+        let tipoEvento = await http.tipoEventoPorCodEvento(codigo)
+        if (tipoEvento) {
+          retorno.push({
+            ProcessoId: processo.Id,
+            TipoEventoId: tipoEvento ? tipoEvento.Id : null,
+            Data: await utils.formataData(data)
+          })
+        }
       }
-      eventos.push({
-        codigo,
-        descricao,
-        data
-      })
     }
-    for (let evento of eventos) {
-      let tipoEvento = await this.tipoEventoPorCodEvento(evento.codigo)
-      if (tipoEvento) {
+    return retorno
+  },
+  async tratarPessoasRelacionadas (elsPessoasRelacionadas, processo) {
+    let retorno = []
+    for (let el of elsPessoasRelacionadas) {
+      let tds = await el.findElements(By.tagName('TD'))
+      if (tds.length) {
         retorno.push({
           ProcessoId: processo.Id,
-          TipoEventoId: tipoEvento ? tipoEvento.Id : null,
-          Data: await utils.formataData(evento.data)
+          TipoRelacao: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+          CpfCnpj: await tds[1]?.getText() ? await tds[1]?.getText() : null,
+          Nome: await tds[2]?.getText() ? await tds[2]?.getText() : null,
+          ResponsabilidadeRepresentação: await tds[3]?.getText() ? await tds[3]?.getText() : null,
+          PrazoArrendamento: await tds[4]?.getText() ? await tds[4]?.getText() : null,
+          DataInicio: await utils.formataData(await tds[5]?.getText() ? await tds[5]?.getText() : null),
+          DataFinal: await utils.formataData(await tds[6]?.getText() ? await tds[6]?.getText() : null)
         })
       }
     }
@@ -166,19 +164,6 @@ export default {
     await driver.wait(until.elementIsVisible(spinner))
     await driver.wait(until.elementIsNotVisible(spinner))
   },
-  // async inputPoligonalHabilitado () {
-  //   await driver.wait(until.elementLocated(By.xpath('//*[@id="ctl00_conteudo_btnPoligonal"]')))
-  // },
-  // async inputPoligonalDesabilitado () {
-  //   await driver.wait(() => {
-  //     return driver.findElements(By.xpath('//*[@id="ctl00_conteudo_btnPoligonal"]')).then((elements) => {
-  //       if (elements.length <= 0) {
-  //         return true
-  //       }
-  //       return false
-  //     })
-  //   })
-  // },
   async verificaInputPoligonalExiste () {
     return driver.findElements(By.xpath('//*[@id="ctl00_conteudo_btnPoligonal"]')).then((els) => {
       if (els.length > 0) {
