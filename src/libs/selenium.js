@@ -61,17 +61,17 @@ export default {
     console.log('push em atualizações')
     console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
   },
-  async pegaCaptcha () {
+  async pegaCaptcha (processo) {
     try {
       let base64 = await driver.executeScript(script)
-      return await humanCoder.base64ToCaptcha(base64)
+      return await driver.wait(humanCoder.base64ToCaptcha(base64), 15000)
     } catch (error) {
-      this.tentarNovamente()
+      await this.tentarNovamente(processo)
     }
   },
   async abrirProcesso (processo) {
     console.log('pegando o captcha')
-    let captcha = await this.pegaCaptcha()
+    let captcha = await this.pegaCaptcha(processo)
     console.log('Captcha: ' + captcha)
     console.log('inserindo valor no input de processo')
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(processo.NumeroProcesso)
@@ -105,25 +105,25 @@ export default {
       Id: processo.Id,
       NumeroProcesso: processo.NumeroProcesso,
       Atualizar: false,
-      UF: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUF"]')).getText(),
-      Nup: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNup"]')).getText(),
-      Area: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText(),
+      UF: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUF"]')).getText() || null,
+      Nup: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNup"]')).getText() || null,
+      Area: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText() || null,
       Ativo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblAtivo"]')).getText() === 'Sim' ? true : false,
       FaseId: await this.fasesPorNome(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoFase"]')).getText()),
       Eventos: await this.trataEventos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]/tbody/tr')), processo),
-      PessoasRelacionadas: await this.tratarPessoasRelacionadas(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridPessoas"]/tbody/tr')), processo), 
-      Titulos: await this.tratarTitulos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridTitulos"]/tbody/tr')), processo), 
-      Substancias: await this.tratarSubstancias(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridSubstancias"]/tbody/tr')), processo), 
-      Municipios: await this.tratarMunicipios(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridMunicipios"]/tbody/tr')), processo), 
-      CondicoesPropriedadeSolo: await this.tratarCondicoesPropriedadeSolo(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridHistoricoPropriedadeSolo"]/tbody/tr')), processo), 
-      ProcessosAssociados: await this.tratarProcessosAssociados(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridProcessosAssociados"]/tbody/tr')), processo), 
-      DocumentosProcesso: await this.tratarDocumentosProcesso(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridDocumentos"]/tbody/tr')), processo), 
+      PessoasRelacionadas: await this.tratarPessoasRelacionadas(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridPessoas"]/tbody/tr')), processo),
+      Titulos: await this.tratarTitulos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridTitulos"]/tbody/tr')), processo),
+      Substancias: await this.tratarSubstancias(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridSubstancias"]/tbody/tr')), processo),
+      Municipios: await this.tratarMunicipios(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridMunicipios"]/tbody/tr')), processo),
+      CondicoesPropriedadeSolo: await this.tratarCondicoesPropriedadeSolo(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridHistoricoPropriedadeSolo"]/tbody/tr')), processo),
+      ProcessosAssociados: await this.tratarProcessosAssociados(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridProcessosAssociados"]/tbody/tr')), processo),
+      DocumentosProcesso: await this.tratarDocumentosProcesso(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridDocumentos"]/tbody/tr')), processo),
       DataProtocolo: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataProtocolo"]')).getText()),
       DataPrioridade: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataPrioridade"]')).getText()),
-      Superintendencia: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDistrito"]')).getText(),
-      TipoRequerimento: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoRequerimento"]')).getText(),
-      NumeroCadastroEmpresa: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNumeroProcessoCadastroEmpresa"]')).getText(),
-      UnidadeProtocolizadora: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUnidadeProtocolizadora"]')).getText()
+      Superintendencia: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDistrito"]')).getText() || null,
+      TipoRequerimento: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoRequerimento"]')).getText() || null,
+      NumeroCadastroEmpresa: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNumeroProcessoCadastroEmpresa"]')).getText() || null,
+      UnidadeProtocolizadora: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUnidadeProtocolizadora"]')).getText() || null
     }
   },
   async fasesPorNome (faseAtual) {
