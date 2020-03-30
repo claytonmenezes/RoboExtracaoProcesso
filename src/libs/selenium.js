@@ -62,8 +62,12 @@ export default {
     console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
   },
   async pegaCaptcha () {
-    let base64 = await driver.executeScript(script)
-    return await humanCoder.base64ToCaptcha(base64)
+    try {
+      let base64 = await driver.executeScript(script)
+      return await humanCoder.base64ToCaptcha(base64)
+    } catch (error) {
+      this.tentarNovamente()
+    }
   },
   async abrirProcesso (processo) {
     console.log('pegando o captcha')
@@ -107,7 +111,13 @@ export default {
       Ativo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblAtivo"]')).getText() === 'Sim' ? true : false,
       FaseId: await this.fasesPorNome(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoFase"]')).getText()),
       Eventos: await this.trataEventos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]/tbody/tr')), processo),
-      PessoasRelacionadas: await this.tratarPessoasRelacionadas(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridPessoas"]/tbody/tr')), processo),
+      PessoasRelacionadas: await this.tratarPessoasRelacionadas(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridPessoas"]/tbody/tr')), processo), 
+      Titulos: await this.tratarTitulos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridTitulos"]/tbody/tr')), processo), 
+      Substancias: await this.tratarSubstancias(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridSubstancias"]/tbody/tr')), processo), 
+      Municipios: await this.tratarMunicipios(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridMunicipios"]/tbody/tr')), processo), 
+      CondicoesPropriedadeSolo: await this.tratarCondicoesPropriedadeSolo(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridHistoricoPropriedadeSolo"]/tbody/tr')), processo), 
+      ProcessosAssociados: await this.tratarProcessosAssociados(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridProcessosAssociados"]/tbody/tr')), processo), 
+      DocumentosProcesso: await this.tratarDocumentosProcesso(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridDocumentos"]/tbody/tr')), processo), 
       DataProtocolo: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataProtocolo"]')).getText()),
       DataPrioridade: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataPrioridade"]')).getText()),
       Superintendencia: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDistrito"]')).getText(),
@@ -122,18 +132,131 @@ export default {
   },
   async trataEventos (elsEventos, processo) {
     let retorno = []
-    for (let el of elsEventos) {
-      let tds = await el.findElements(By.tagName('TD'))
-      if (tds.length) {
-        let descricao = await tds[0]?.getText()
-        let codigo = descricao.substring(0, descricao.indexOf(' - ', 0))
-        let data = await tds[1]?.getText()
-        let tipoEvento = await http.tipoEventoPorCodEvento(codigo)
-        if (tipoEvento) {
+    let ths = await elsEventos[0].findElements(By.tagName('TH'))
+    if (ths.length) {
+      for (let el of elsEventos) {
+        let tds = await el.findElements(By.tagName('TD'))
+        if (tds.length) {
+          let descricao = await tds[0]?.getText()
+          let codigo = descricao.substring(0, descricao.indexOf(' - ', 0))
+          let data = await tds[1]?.getText()
+          let tipoEvento = await http.tipoEventoPorCodEvento(codigo)
+          if (tipoEvento) {
+            retorno.push({
+              ProcessoId: processo.Id,
+              TipoEventoId: tipoEvento ? tipoEvento.Id : null,
+              Data: await utils.formataData(data)
+            })
+          }
+        }
+      }
+    }
+    return retorno
+  },
+  async tratarDocumentosProcesso (elsDocumentosProcesso, processo) {
+    let retorno = []
+    let ths = await elsDocumentosProcesso[0].findElements(By.tagName('TH'))
+    if (ths.length) {
+      for (let el of elsDocumentosProcesso) {
+        let tds = await el.findElements(By.tagName('TD'))
+        if (tds.length) {
           retorno.push({
             ProcessoId: processo.Id,
-            TipoEventoId: tipoEvento ? tipoEvento.Id : null,
-            Data: await utils.formataData(data)
+            Descricao: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+            DataProtocolo: await utils.formataData(await tds[1]?.getText() ? await tds[1]?.getText() : null)
+          })
+        }
+      }
+    }
+    return retorno
+  },
+  async tratarProcessosAssociados (elsProcessosAssociados, processo) {
+    let retorno = []
+    let ths = await elsProcessosAssociados[0].findElements(By.tagName('TH'))
+    if (ths.length) {
+      for (let el of elsProcessosAssociados) {
+        let tds = await el.findElements(By.tagName('TD'))
+        if (tds.length) {
+          retorno.push({
+            ProcessoId: processo.Id,
+            NumeroProcesso: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+            Titular: await tds[1]?.getText() ? await tds[1]?.getText() : null,
+            TipoAssociacao: await tds[2]?.getText() ? await tds[2]?.getText() : null,
+            DataAssociacao: await utils.formataData(await tds[3]?.getText() ? await tds[3]?.getText() : null),
+            DataDesassociacao: await utils.formataData(await tds[4]?.getText() ? await tds[4]?.getText() : null)
+          })
+        }
+      }
+    }
+    return retorno
+  },
+  async tratarCondicoesPropriedadeSolo (elsCondicoesPropriedadeSolo, processo) {
+    let retorno = []
+    let ths = await elsCondicoesPropriedadeSolo[0].findElements(By.tagName('TH'))
+    if (ths.length) {
+      for (let el of elsCondicoesPropriedadeSolo) {
+        let tds = await el.findElements(By.tagName('TD'))
+        if (tds.length) {
+          retorno.push({
+            ProcessoId: processo.Id,
+            Tipo: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+          })
+        }
+      }
+    }
+    return retorno
+  },
+  async tratarMunicipios (elsMunicipios, processo) {
+    let retorno = []
+    let ths = await elsMunicipios[0].findElements(By.tagName('TH'))
+    if (ths.length) {
+      for (let el of elsMunicipios) {
+        let tds = await el.findElements(By.tagName('TD'))
+        if (tds.length) {
+          retorno.push({
+            ProcessoId: processo.Id,
+            Nome: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+          })
+        }
+      }
+    }
+    return retorno
+  },
+  async tratarSubstancias (elsSubstancias, processo) {
+    let retorno = []
+    let ths = await elsSubstancias[0].findElements(By.tagName('TH'))
+    if (ths.length) {
+      for (let el of elsSubstancias) {
+        let tds = await el.findElements(By.tagName('TD'))
+        if (tds.length) {
+          retorno.push({
+            ProcessoId: processo.Id,
+            Nome: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+            TipoUso: await tds[1]?.getText() ? await tds[1]?.getText() : null,
+            DataInicio: await utils.formataData(await tds[2]?.getText() ? await tds[2]?.getText() : null),
+            DataFinal: await utils.formataData(await tds[3]?.getText() ? await tds[3]?.getText() : null),
+            MotivoEncerramento: await tds[4]?.getText() ? await tds[4]?.getText() : null
+          })
+        }
+      }
+    }
+    return retorno
+  },
+  async tratarTitulos (elsTitulos, processo) {
+    let retorno = []
+    let ths = await elsTitulos[0].findElements(By.tagName('TH'))
+    if (ths.length) {
+      for (let el of elsTitulos) {
+        let tds = await el.findElements(By.tagName('TD'))
+        if (tds.length) {
+          retorno.push({
+            ProcessoId: processo.Id,
+            Numero: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+            Descricao: await tds[1]?.getText() ? await tds[1]?.getText() : null,
+            TipoTitulo: await tds[2]?.getText() ? await tds[2]?.getText() : null,
+            SituacaoTitulo: await tds[3]?.getText() ? await tds[3]?.getText() : null,
+            DataPublicacao: await utils.formataData(await tds[4]?.getText() ? await tds[4]?.getText() : null),
+            DataVencimento: await utils.formataData(await tds[5]?.getText() ? await tds[5]?.getText() : null)
           })
         }
       }
@@ -142,19 +265,22 @@ export default {
   },
   async tratarPessoasRelacionadas (elsPessoasRelacionadas, processo) {
     let retorno = []
-    for (let el of elsPessoasRelacionadas) {
-      let tds = await el.findElements(By.tagName('TD'))
-      if (tds.length) {
-        retorno.push({
-          ProcessoId: processo.Id,
-          TipoRelacao: await tds[0]?.getText() ? await tds[0]?.getText() : null,
-          CpfCnpj: await tds[1]?.getText() ? await tds[1]?.getText() : null,
-          Nome: await tds[2]?.getText() ? await tds[2]?.getText() : null,
-          ResponsabilidadeRepresentação: await tds[3]?.getText() ? await tds[3]?.getText() : null,
-          PrazoArrendamento: await tds[4]?.getText() ? await tds[4]?.getText() : null,
-          DataInicio: await utils.formataData(await tds[5]?.getText() ? await tds[5]?.getText() : null),
-          DataFinal: await utils.formataData(await tds[6]?.getText() ? await tds[6]?.getText() : null)
-        })
+    let ths = await elsPessoasRelacionadas[0].findElements(By.tagName('TH'))
+    if (ths.length) {
+      for (let el of elsPessoasRelacionadas) {
+        let tds = await el.findElements(By.tagName('TD'))
+        if (tds.length) {
+          retorno.push({
+            ProcessoId: processo.Id,
+            TipoRelacao: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+            CpfCnpj: await tds[1]?.getText() ? await tds[1]?.getText() : null,
+            Nome: await tds[2]?.getText() ? await tds[2]?.getText() : null,
+            ResponsabilidadeRepresentação: await tds[3]?.getText() ? await tds[3]?.getText() : null,
+            PrazoArrendamento: await tds[4]?.getText() ? await tds[4]?.getText() : null,
+            DataInicio: await utils.formataData(await tds[5]?.getText() ? await tds[5]?.getText() : null),
+            DataFinal: await utils.formataData(await tds[6]?.getText() ? await tds[6]?.getText() : null)
+          })
+        }
       }
     }
     return retorno
