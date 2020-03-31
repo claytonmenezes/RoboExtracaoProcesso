@@ -16,6 +16,7 @@ export default {
         console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
         console.log('------------------------------------------------------------------------------------------------------')
         for (let processo of processosAtualizar) {
+          console.log('Abrindo o processo ' + processo.NumeroProcesso)
           await this.abrirProcesso(processo)
           await this.atualizarProcesso(processo)
           await this.fecharProcesso()
@@ -53,25 +54,25 @@ export default {
   },
   async atualizar (processo) {
     console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
-    let atualizacao = await this.pegaAtualizacao(processo)
     console.log('pegando atualização')
-    let processoAtualizado = await http.atualizarBanco(atualizacao)
+    let atualizacao = await this.pegaAtualizacao(processo)
     console.log('Atualizando no banco de dados')
+    let processoAtualizado = await http.atualizarBanco(atualizacao)
     atualizacoes.push(processoAtualizado)
-    console.log('push em atualizações')
     console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
   },
-  async pegaCaptcha (processo) {
+  async pegaCaptcha () {
     try {
       let base64 = await driver.executeScript(script)
       return await driver.wait(humanCoder.base64ToCaptcha(base64), 15000)
     } catch (error) {
-      await this.tentarNovamente(processo)
+      console.log('tentando pegar o captcha novamente')
+      return await this.pegaCaptcha()
     }
   },
   async abrirProcesso (processo) {
     console.log('pegando o captcha')
-    let captcha = await this.pegaCaptcha(processo)
+    let captcha = await this.pegaCaptcha()
     console.log('Captcha: ' + captcha)
     console.log('inserindo valor no input de processo')
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(processo.NumeroProcesso)
@@ -81,13 +82,19 @@ export default {
     console.log('Clicando na consulta')
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
     await driver.sleep(1000)
+    console.log('Verificando se o spinner esta visivel')
     if (await this.verificaSpinnerVisivel()) {
-      console.log('Esperando o spinner')
-      await this.esperaSpinner()
+      console.log('Spinner visivel, esperando o spinner')
+      await driver.wait(this.esperaSpinner())
+    } else {
+      console.log('Spinner não está visivel')
     }
+    console.log('Verificando se o input poligonal existe')
     if (!await this.verificaInputPoligonalExiste()) {
-      console.log('Tentando novamente')
-      await this.tentarNovamente(processo)
+      console.log('Input não existente tentando abrir o processo novamente')
+      await this.abrirProcesso(processo)
+    } else {
+      console.log('Input existente')
     }
   },
   async fecharProcesso () {
@@ -95,9 +102,12 @@ export default {
     console.log('Clicando na nova consulta')
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
     await driver.sleep(1000)
+    console.log('Verificando se o spinner esta visivel')
     if (await this.verificaSpinnerVisivel()) {
-      console.log('Esperando o spinner')
-      await this.esperaSpinner()
+      console.log('Spinner visivel, esperando o spinner')
+      await driver.wait(this.esperaSpinner())
+    } else {
+      console.log('Spinner não está visivel')
     }
   },
   async pegaAtualizacao (processo) {
@@ -107,7 +117,7 @@ export default {
       Atualizar: false,
       UF: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUF"]')).getText() || null,
       Nup: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNup"]')).getText() || null,
-      Area: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText() || null,
+      Area: await (await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText()).replace(',', '.') || null,
       Ativo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblAtivo"]')).getText() === 'Sim' ? true : false,
       FaseId: await this.fasesPorNome(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoFase"]')).getText()),
       Eventos: await this.trataEventos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]/tbody/tr')), processo),
@@ -162,8 +172,8 @@ export default {
         if (tds.length) {
           retorno.push({
             ProcessoId: processo.Id,
-            Descricao: await tds[0]?.getText() ? await tds[0]?.getText() : null,
-            DataProtocolo: await utils.formataData(await tds[1]?.getText() ? await tds[1]?.getText() : null)
+            Descricao: await tds[0]?.getText() || null,
+            DataProtocolo: await utils.formataData(await tds[1]?.getText() || null)
           })
         }
       }
@@ -179,11 +189,11 @@ export default {
         if (tds.length) {
           retorno.push({
             ProcessoId: processo.Id,
-            NumeroProcesso: await tds[0]?.getText() ? await tds[0]?.getText() : null,
-            Titular: await tds[1]?.getText() ? await tds[1]?.getText() : null,
-            TipoAssociacao: await tds[2]?.getText() ? await tds[2]?.getText() : null,
-            DataAssociacao: await utils.formataData(await tds[3]?.getText() ? await tds[3]?.getText() : null),
-            DataDesassociacao: await utils.formataData(await tds[4]?.getText() ? await tds[4]?.getText() : null)
+            NumeroProcesso: await tds[0]?.getText() || null,
+            Titular: await tds[1]?.getText() || null,
+            TipoAssociacao: await tds[2]?.getText() || null,
+            DataAssociacao: await utils.formataData(await tds[3]?.getText() || null),
+            DataDesassociacao: await utils.formataData(await tds[4]?.getText() || null)
           })
         }
       }
@@ -199,7 +209,7 @@ export default {
         if (tds.length) {
           retorno.push({
             ProcessoId: processo.Id,
-            Tipo: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+            Tipo: await tds[0]?.getText() || null,
           })
         }
       }
@@ -215,7 +225,7 @@ export default {
         if (tds.length) {
           retorno.push({
             ProcessoId: processo.Id,
-            Nome: await tds[0]?.getText() ? await tds[0]?.getText() : null,
+            Nome: await tds[0]?.getText() || null,
           })
         }
       }
@@ -231,11 +241,11 @@ export default {
         if (tds.length) {
           retorno.push({
             ProcessoId: processo.Id,
-            Nome: await tds[0]?.getText() ? await tds[0]?.getText() : null,
-            TipoUso: await tds[1]?.getText() ? await tds[1]?.getText() : null,
-            DataInicio: await utils.formataData(await tds[2]?.getText() ? await tds[2]?.getText() : null),
-            DataFinal: await utils.formataData(await tds[3]?.getText() ? await tds[3]?.getText() : null),
-            MotivoEncerramento: await tds[4]?.getText() ? await tds[4]?.getText() : null
+            Nome: await tds[0]?.getText() || null,
+            TipoUso: await tds[1]?.getText() || null,
+            DataInicio: await utils.formataData(await tds[2]?.getText() || null),
+            DataFinal: await utils.formataData(await tds[3]?.getText() || null),
+            MotivoEncerramento: await tds[4]?.getText() || null
           })
         }
       }
@@ -251,12 +261,12 @@ export default {
         if (tds.length) {
           retorno.push({
             ProcessoId: processo.Id,
-            Numero: await tds[0]?.getText() ? await tds[0]?.getText() : null,
-            Descricao: await tds[1]?.getText() ? await tds[1]?.getText() : null,
-            TipoTitulo: await tds[2]?.getText() ? await tds[2]?.getText() : null,
-            SituacaoTitulo: await tds[3]?.getText() ? await tds[3]?.getText() : null,
-            DataPublicacao: await utils.formataData(await tds[4]?.getText() ? await tds[4]?.getText() : null),
-            DataVencimento: await utils.formataData(await tds[5]?.getText() ? await tds[5]?.getText() : null)
+            Numero: await tds[0]?.getText() || null,
+            Descricao: await tds[1]?.getText() || null,
+            TipoTitulo: await tds[2]?.getText() || null,
+            SituacaoTitulo: await tds[3]?.getText() || null,
+            DataPublicacao: await utils.formataData(await tds[4]?.getText() || null),
+            DataVencimento: await utils.formataData(await tds[5]?.getText() || null)
           })
         }
       }
@@ -272,13 +282,13 @@ export default {
         if (tds.length) {
           retorno.push({
             ProcessoId: processo.Id,
-            TipoRelacao: await tds[0]?.getText() ? await tds[0]?.getText() : null,
-            CpfCnpj: await tds[1]?.getText() ? await tds[1]?.getText() : null,
-            Nome: await tds[2]?.getText() ? await tds[2]?.getText() : null,
-            ResponsabilidadeRepresentação: await tds[3]?.getText() ? await tds[3]?.getText() : null,
-            PrazoArrendamento: await tds[4]?.getText() ? await tds[4]?.getText() : null,
-            DataInicio: await utils.formataData(await tds[5]?.getText() ? await tds[5]?.getText() : null),
-            DataFinal: await utils.formataData(await tds[6]?.getText() ? await tds[6]?.getText() : null)
+            TipoRelacao: await tds[0]?.getText() || null,
+            CpfCnpj: await tds[1]?.getText() || null,
+            Nome: await tds[2]?.getText() || null,
+            ResponsabilidadeRepresentação: await tds[3]?.getText() || null,
+            PrazoArrendamento: await tds[4]?.getText() || null,
+            DataInicio: await utils.formataData(await tds[5]?.getText() || null),
+            DataFinal: await utils.formataData(await tds[6]?.getText() || null)
           })
         }
       }
@@ -287,8 +297,18 @@ export default {
   },
   async esperaSpinner () {
     let spinner = await driver.findElement(By.xpath('//*[@id="ctl00_upCarregando"]'))
-    await driver.wait(until.elementIsVisible(spinner))
-    await driver.wait(until.elementIsNotVisible(spinner))
+    try {
+      await driver.wait(until.elementIsVisible(spinner), 30000)
+      await driver.wait(until.elementIsNotVisible(spinner), 30000)
+    } catch (error) {
+      console.log('Verificando se o spinner realmente esta visivel')
+      if (await this.verificaSpinnerVisivel()) {
+        console.log('Spinner visivel, esperando o spinner')
+        await driver.wait(this.esperaSpinner())
+      } else {
+        console.log('Spinner não está visivel')
+      }
+    }
   },
   async verificaInputPoligonalExiste () {
     return driver.findElements(By.xpath('//*[@id="ctl00_conteudo_btnPoligonal"]')).then((els) => {
