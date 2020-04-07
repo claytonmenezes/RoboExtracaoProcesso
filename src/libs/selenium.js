@@ -48,7 +48,6 @@ export default {
     }
   },
   async tentarNovamente (processo) {
-    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).clear()
     await this.abrirProcesso(processo)
     await this.atualizarProcesso(processo)
   },
@@ -66,11 +65,13 @@ export default {
       let base64 = await driver.executeScript(script)
       return await driver.wait(humanCoder.base64ToCaptcha(base64), 15000)
     } catch (error) {
+      console.log('Erro: ' + error.message)
       console.log('tentando pegar o captcha novamente')
       return await this.pegaCaptcha()
     }
   },
   async abrirProcesso (processo) {
+    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).clear()
     console.log('pegando o captcha')
     let captcha = await this.pegaCaptcha()
     console.log('Captcha: ' + captcha)
@@ -83,12 +84,7 @@ export default {
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
     await driver.sleep(1000)
     console.log('Verificando se o spinner esta visivel')
-    if (await this.verificaSpinnerVisivel()) {
-      console.log('Spinner visivel, esperando o spinner')
-      await driver.wait(this.esperaSpinner())
-    } else {
-      console.log('Spinner não está visivel')
-    }
+    await driver.wait(this.esperaSpinner())
     console.log('Verificando se o input poligonal existe')
     if (!await this.verificaInputPoligonalExiste()) {
       console.log('Input não existente tentando abrir o processo novamente')
@@ -103,12 +99,7 @@ export default {
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
     await driver.sleep(1000)
     console.log('Verificando se o spinner esta visivel')
-    if (await this.verificaSpinnerVisivel()) {
-      console.log('Spinner visivel, esperando o spinner')
-      await driver.wait(this.esperaSpinner())
-    } else {
-      console.log('Spinner não está visivel')
-    }
+    await driver.wait(this.esperaSpinner())
   },
   async pegaAtualizacao (processo) {
     return {
@@ -298,16 +289,17 @@ export default {
   async esperaSpinner () {
     let spinner = await driver.findElement(By.xpath('//*[@id="ctl00_upCarregando"]'))
     try {
-      await driver.wait(until.elementIsVisible(spinner), 30000)
-      await driver.wait(until.elementIsNotVisible(spinner), 30000)
-    } catch (error) {
-      console.log('Verificando se o spinner realmente esta visivel')
-      if (await this.verificaSpinnerVisivel()) {
+      if (await spinner.isDisplayed()) {
         console.log('Spinner visivel, esperando o spinner')
-        await driver.wait(this.esperaSpinner())
+        await driver.wait(until.elementIsVisible(spinner), 30000)
+        await driver.wait(until.elementIsNotVisible(spinner), 30000)
       } else {
-        console.log('Spinner não está visivel')
+        console.log('Spinner não está visivel!')
       }
+    } catch (error) {
+      console.log('Erro: ' + error.message)
+      console.log('Verificando se o spinner realmente esta visivel')
+      await driver.wait(this.esperaSpinner())
     }
   },
   async verificaInputPoligonalExiste () {
@@ -317,9 +309,6 @@ export default {
       }
       return false
     })
-  },
-  async verificaSpinnerVisivel () {
-    return driver.findElement(By.xpath('//*[@id="ctl00_upCarregando"]')).isDisplayed()
   }
 }
 const script = "var canvas = document.createElement('canvas'); "+
