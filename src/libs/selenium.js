@@ -16,11 +16,16 @@ export default {
         console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
         console.log('------------------------------------------------------------------------------------------------------')
         for (let processo of processosAtualizar) {
-          console.log('Abrindo o processo ' + processo.NumeroProcesso)
-          await this.abrirProcesso(processo)
-          await this.atualizarProcesso(processo)
-          await this.fecharProcesso()
-          console.log('------------------------------------------------------------------------------------------------------')
+          try {
+            console.log('Abrindo o processo ' + processo.NumeroProcesso)
+            await this.abrirProcesso(processo)
+            await this.atualizarProcesso(processo)
+            await this.fecharProcesso()
+            console.log('------------------------------------------------------------------------------------------------------')
+          } catch (error) {
+            console.log('Erro: ' + error.message) 
+            console.log('------------------------------------------------------------------------------------------------------')
+          }
         }
       } else {
         console.log('Não foram encontrados processos para atualização')
