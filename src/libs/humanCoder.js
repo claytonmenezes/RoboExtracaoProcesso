@@ -11,7 +11,7 @@ export default {
         action: 'upload',
         vendorkey: '',
         key: 'M2FEK8W1HFQF26STVSIYFJLM8L6JFG2HQC876OE6',
-        file: base64,
+        file: base64.substring(base64.indexOf(',', 0) + 1),
         gen_task_id: 42
       })
     }).then(response => {

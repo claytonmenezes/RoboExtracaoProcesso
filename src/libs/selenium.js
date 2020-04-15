@@ -77,6 +77,7 @@ export default {
   },
   async abrirProcesso (processo) {
     await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).clear()
+    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).clear()
     console.log('pegando o captcha')
     let captcha = await this.pegaCaptcha()
     console.log('Captcha: ' + captcha)
