@@ -12,7 +12,7 @@ export default {
     })
   },
   authenticate () {
-    let user = 'robo@teste.com'
+    let user = 'robo1@teste.com'
     let password = '123456'
     const sha = require('sha.js')
     let details = {

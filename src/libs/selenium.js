@@ -8,36 +8,54 @@ let atualizacoes = []
 
 export default {
   async start () {
-    driver = new Builder().forBrowser('chrome').usingServer('http://localhost:8090/wd/hub').build()
-    try {
-      await driver.get('https://sistemas.anm.gov.br/SCM/site/admin/dadosProcesso.aspx')
-      let processosAtualizar = await http.pegaProcessosParaAtualizar()
-      if (processosAtualizar.length) {
-        console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
-        console.log('------------------------------------------------------------------------------------------------------')
-        for (let processo of processosAtualizar) {
-          try {
-            console.log('Abrindo o processo ' + processo.NumeroProcesso)
-            await this.abrirProcesso(processo)
-            await this.atualizarProcesso(processo)
-            await this.fecharProcesso()
-            console.log('------------------------------------------------------------------------------------------------------')
-          } catch (error) {
-            console.log('Erro: ' + error.message) 
-            console.log('------------------------------------------------------------------------------------------------------')
+    let paginaOk = await this.abrePagina()
+    if (paginaOk) {
+      try {
+        let processosAtualizar = await http.pegaProcessosParaAtualizar()
+        if (processosAtualizar.length) {
+          console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
+          console.log('------------------------------------------------------------------------------------------------------')
+          for (let processo of processosAtualizar) {
+            try {
+              await this.abrirProcesso(processo)
+              await this.atualizarProcesso(processo)
+              await this.atualizarPagina()
+              console.log('------------------------------------------------------------------------------------------------------')
+            } catch (error) {
+              console.log('Erro: ' + error) 
+              console.log('------------------------------------------------------------------------------------------------------')
+            }
           }
+        } else {
+          console.log('Não foram encontrados processos para atualização')
         }
-      } else {
-        console.log('Não foram encontrados processos para atualização')
+        console.log(atualizacoes.length + ' atualizado(s)')
+        return atualizacoes
       }
-      console.log(atualizacoes.length + ' atualizado(s)')
-      return atualizacoes
+      finally {
+        await driver.quit();
+        driver = null
+        atualizacoes = []
+        console.log('Atualizações finalizadas')
+      }
     }
-    finally {
-      await driver.quit();
-      driver = null
-      atualizacoes = []
-      console.log('Atualizações finalizadas')
+  },
+  async abrePagina () {
+    console.log('Abrindo o navegador e carregando a página')
+    try {
+      driver = await new Builder().forBrowser('chrome').usingServer('http://localhost:8090/wd/hub').build()
+      await driver.get('https://sistemas.anm.gov.br/SCM/site/admin/dadosProcesso.aspx')
+      console.log('Página carregada')
+      return true
+    } catch (error) {
+      console.log('Erro ao abrir o navegador e carregar a página')
+      if (error.message === 'ECONNREFUSED connect ECONNREFUSED 127.0.0.1:8090') {
+        console.log('Server selenium não encontrado na porta 8090');
+      }
+      else {
+        console.log('Erro: ' + error)
+      }
+      return false
     }
   },
   async atualizarProcesso (processo) {
@@ -45,16 +63,12 @@ export default {
       await this.atualizar(processo)
     } catch (error) {
       console.log('Erro na atualização do processo N° ' + processo.NumeroProcesso)
-      console.log('Erro: ' + error.message)
+      console.log('Erro: ' + error)
       if (error.message === "Cannot read property 'Id' of null") {
         console.log('Tentando Novamente')
-        await this.tentarNovamente(processo)
+        await this.atualizarProcesso(processo)
       }
     }
-  },
-  async tentarNovamente (processo) {
-    await this.abrirProcesso(processo)
-    await this.atualizarProcesso(processo)
   },
   async atualizar (processo) {
     console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
@@ -70,50 +84,57 @@ export default {
       let base64 = await driver.executeScript(script)
       return await driver.wait(humanCoder.base64ToCaptcha(base64), 15000)
     } catch (error) {
-      console.log('Erro: ' + error.message)
+      console.log('Erro: ' + error)
       console.log('tentando pegar o captcha novamente')
       return await this.pegaCaptcha()
     }
   },
   async abrirProcesso (processo) {
-    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).clear()
-    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).clear()
-    console.log('pegando o captcha')
-    let captcha = await this.pegaCaptcha()
-    console.log('Captcha: ' + captcha)
-    console.log('inserindo valor no input de processo')
-    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(processo.NumeroProcesso)
-    console.log('inserindo valor no input de captcha')
-    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).sendKeys(captcha)
-    await driver.sleep(1000)
-    console.log('Clicando na consulta')
-    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
-    await driver.sleep(1000)
-    console.log('Verificando se o spinner esta visivel')
-    await driver.wait(this.esperaSpinner())
-    console.log('Verificando se o input poligonal existe')
-    if (!await this.verificaInputPoligonalExiste()) {
-      console.log('Input não existente tentando abrir o processo novamente')
-      await this.abrirProcesso(processo)
+    if (await this.verificaPaginaOk()) {
+      console.log('Abrindo o processo ' + processo.NumeroProcesso)
+      await this.limpaInput('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')
+      await this.limpaInput('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')
+      console.log('pegando o captcha')
+      let captcha = await this.pegaCaptcha()
+      console.log('Captcha: ' + captcha)
+      console.log('inserindo valor no input de processo')
+      await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(processo.NumeroProcesso)
+      console.log('inserindo valor no input de captcha')
+      await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).sendKeys(captcha)
+      await driver.sleep(1000)
+      console.log('Clicando na consulta')
+      await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
+      await driver.sleep(1000)
+      try {
+        await driver.wait(this.esperaAbrirProcesso(), 15000)
+      } catch (error) {
+        if (!await driver.wait(this.esperaSpinner())) {
+          await this.atualizarPagina()
+          throw 'Algo Errado Atualizando Pagina'
+        }
+      }
     } else {
-      console.log('Input existente')
+      await this.atualizarPagina()
+      throw new error('Algo Errado Atualizando Pagina')
     }
   },
-  async fecharProcesso () {
-    await driver.sleep(1000)
-    console.log('Clicando na nova consulta')
-    await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
-    await driver.sleep(1000)
-    console.log('Verificando se o spinner esta visivel')
-    await driver.wait(this.esperaSpinner())
-    console.log('Verificando se o input poligonal existe')
-    if (await this.verificaInputPoligonalExiste()) {
-      console.log('Input existente tentando fechar o processo novamente')
-      await this.fecharProcesso()
+  async verificaPaginaOk () {
+    if(
+      await this.verificaElementoExiste('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[1]/img') &&
+      await this.verificaElementoExiste('//*[@id="ctl00_conteudo_txtNumeroProcesso"]') &&
+      await this.verificaElementoExiste('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input') &&
+      await this.verificaElementoExiste('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')
+    ) {
+      return true
+    } else {
+      return false
     }
-    else {
-      console.log('Input não existente tentando abrir o processo novamente')
-    }
+  },
+  async limpaInput (xpath) {
+    await driver.findElement(By.xpath(xpath)).clear()
+  },
+  async atualizarPagina () {
+    await driver.navigate().refresh()
   },
   async pegaAtualizacao (processo) {
     return {
@@ -300,24 +321,23 @@ export default {
     }
     return retorno
   },
-  async esperaSpinner () {
-    let spinner = await driver.findElement(By.xpath('//*[@id="ctl00_upCarregando"]'))
-    try {
-      if (await spinner.isDisplayed()) {
-        console.log('Spinner visivel, esperando o spinner')
-        await driver.wait(until.elementIsVisible(spinner), 30000)
-        await driver.wait(until.elementIsNotVisible(spinner), 30000)
-      } else {
-        console.log('Spinner não está visivel!')
-      }
-    } catch (error) {
-      console.log('Erro: ' + error.message)
-      console.log('Verificando se o spinner realmente esta visivel')
-      await driver.wait(this.esperaSpinner())
+  async esperaAbrirProcesso () {
+    if (await this.verificaElementoExiste('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')) {
+      await this.esperaAbrirProcesso()
     }
   },
-  async verificaInputPoligonalExiste () {
-    return driver.findElements(By.xpath('//*[@id="ctl00_conteudo_btnPoligonal"]')).then((els) => {
+  async esperaSpinner () {
+    let spinner = await driver.findElement(By.xpath('//*[@id="ctl00_upCarregando"]'))
+    if (await spinner.isDisplayed()) {
+      console.log('Spinner visivel, esperando o spinner')
+      await driver.wait(until.elementIsNotVisible(spinner))
+      return true
+    } else {
+      return false
+    }
+  },
+  async verificaElementoExiste (xpath) {
+    return driver.findElements(By.xpath(xpath)).then((els) => {
       if (els.length > 0) {
         return true
       }
