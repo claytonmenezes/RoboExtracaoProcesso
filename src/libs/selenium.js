@@ -106,12 +106,20 @@ export default {
     await driver.sleep(1000)
     console.log('Verificando se o spinner esta visivel')
     await driver.wait(this.esperaSpinner())
+    console.log('Verificando se o input poligonal existe')
+    if (await this.verificaInputPoligonalExiste()) {
+      console.log('Input existente tentando fechar o processo novamente')
+      await this.fecharProcesso()
+    }
+    else {
+      console.log('Input não existente tentando abrir o processo novamente')
+    }
   },
   async pegaAtualizacao (processo) {
     return {
       Id: processo.Id,
       NumeroProcesso: processo.NumeroProcesso,
-      Atualizar: false,
+      Atualizar: 0,
       UF: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUF"]')).getText() || null,
       Nup: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNup"]')).getText() || null,
       Area: await (await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText()).replace(',', '.') || null,
