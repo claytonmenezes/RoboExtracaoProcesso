@@ -5,117 +5,129 @@ import utils from './utils'
 
 let driver = null
 let atualizacoes = []
+let tentativas = 0
 
 export default {
   async start () {
-    let paginaOk = await this.abrePagina()
-    if (paginaOk) {
-      try {
-        let processosAtualizar = await http.pegaProcessosParaAtualizar()
-        if (processosAtualizar.length) {
-          console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
-          console.log('------------------------------------------------------------------------------------------------------')
-          for (let processo of processosAtualizar) {
-            try {
-              await this.abrirProcesso(processo)
-              await this.atualizarProcesso(processo)
-              await this.atualizarPagina()
-              console.log('------------------------------------------------------------------------------------------------------')
-            } catch (error) {
-              console.log('Erro: ' + error) 
-              console.log('------------------------------------------------------------------------------------------------------')
+    if (await this.abrePagina()) {
+      console.log('Página carregada')
+      let processosAtualizar = await http.pegaProcessosParaAtualizar()
+      if (processosAtualizar.length) {
+        console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
+        console.log('------------------------------------------------------------------------------------------------------')
+        for (let processo of processosAtualizar) {
+          try {
+            await this.abrirProcesso(processo)
+            await this.atualizarProcesso(processo)
+            await this.atualizarPagina()
+            console.log('------------------------------------------------------------------------------------------------------')
+          } catch {
+            console.log('Resetando o WebDriver')
+            await this.fechaPagina()
+            if (await this.abrePagina()) {
+              console.log('Página carregada')
+            } else {
+              console.log('Erro ao carregar o WebDriver')
+              throw new 'Erro nos outros metodos'
             }
           }
-        } else {
-          console.log('Não foram encontrados processos para atualização')
         }
-        console.log(atualizacoes.length + ' atualizado(s)')
-        return atualizacoes
+      } else {
+        console.log('Não foram encontrados processos para atualização')
       }
-      finally {
-        await driver.quit();
-        driver = null
-        atualizacoes = []
-        console.log('Atualizações finalizadas')
-      }
+      console.log(atualizacoes.length + ' atualizado(s)')
+      await this.fechaPagina()
+      atualizacoes = []
+      console.log('Atualizações finalizadas')
+      return atualizacoes
     }
   },
   async abrePagina () {
-    console.log('Abrindo o navegador e carregando a página')
+    console.log('Carregando o WebDriver e carregando a página')
     try {
       driver = await new Builder().forBrowser('chrome').usingServer('http://localhost:8090/wd/hub').build()
       await driver.get('https://sistemas.anm.gov.br/SCM/site/admin/dadosProcesso.aspx')
-      console.log('Página carregada')
       return true
-    } catch (error) {
-      console.log('Erro ao abrir o navegador e carregar a página')
-      if (error.message === 'ECONNREFUSED connect ECONNREFUSED 127.0.0.1:8090') {
-        console.log('Server selenium não encontrado na porta 8090');
-      }
-      else {
-        console.log('Erro: ' + error)
-      }
+    } catch {
+      console.log('Erro ao abrir o navegador e carregar a página verificar o Server Selenium')
       return false
     }
   },
+  async fechaPagina () {
+    console.log('Fechando a Pagina e zerando o WebDriver')
+    await driver.quit();
+    driver = null
+  },
   async atualizarProcesso (processo) {
     try {
-      await this.atualizar(processo)
-    } catch (error) {
-      console.log('Erro na atualização do processo N° ' + processo.NumeroProcesso)
-      console.log('Erro: ' + error)
-      if (error.message === "Cannot read property 'Id' of null") {
+      console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
+      console.log('pegando atualização')
+      let atualizacao = await this.pegaAtualizacao(processo)
+      console.log('Atualizando no banco de dados')
+      let processoAtualizado = await http.atualizarBanco(atualizacao)
+      atualizacoes.push(processoAtualizado)
+      console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
+    } catch {
+      tentativas++
+      if (tentativas <= 3) {
+        console.log('Tentativa: ' + tentativas)
+        console.log('Erro na atualização do processo N° ' + processo.NumeroProcesso)
         console.log('Tentando Novamente')
         await this.atualizarProcesso(processo)
+      } else {
+        console.log('Tentativas excedidas, pulando o processo')
+        throw new 'Tentativas excedidas no metodo atualizarProcesso'
       }
     }
-  },
-  async atualizar (processo) {
-    console.log('Iniciando a atualização do processo ' + processo.NumeroProcesso)
-    console.log('pegando atualização')
-    let atualizacao = await this.pegaAtualizacao(processo)
-    console.log('Atualizando no banco de dados')
-    let processoAtualizado = await http.atualizarBanco(atualizacao)
-    atualizacoes.push(processoAtualizado)
-    console.log('Processo N° ' + processo.NumeroProcesso + ' foi atualizado')
   },
   async pegaCaptcha () {
     try {
       let base64 = await driver.executeScript(script)
       return await driver.wait(humanCoder.base64ToCaptcha(base64), 15000)
-    } catch (error) {
-      console.log('Erro: ' + error)
-      console.log('tentando pegar o captcha novamente')
-      return await this.pegaCaptcha()
+    } catch {
+      console.log('Algo Errado no metodo pegaCaptcha')
+      throw new 'Erro no metodo pegaCaptcha'
     }
   },
   async abrirProcesso (processo) {
     if (await this.verificaPaginaOk()) {
-      console.log('Abrindo o processo ' + processo.NumeroProcesso)
-      await this.limpaInput('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')
-      await this.limpaInput('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')
-      console.log('pegando o captcha')
-      let captcha = await this.pegaCaptcha()
-      console.log('Captcha: ' + captcha)
-      console.log('inserindo valor no input de processo')
-      await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(processo.NumeroProcesso)
-      console.log('inserindo valor no input de captcha')
-      await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).sendKeys(captcha)
-      await driver.sleep(1000)
-      console.log('Clicando na consulta')
-      await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
-      await driver.sleep(1000)
       try {
-        await driver.wait(this.esperaAbrirProcesso(), 15000)
-      } catch (error) {
-        if (!await driver.wait(this.esperaSpinner())) {
+        console.log('Abrindo o processo ' + processo.NumeroProcesso)
+        await this.limpaInput('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')
+        await this.limpaInput('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')
+        console.log('pegando o captcha')
+        let captcha = await this.pegaCaptcha()
+        console.log('Captcha: ' + captcha)
+        console.log('inserindo valor no input de processo')
+        await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_txtNumeroProcesso"]')).sendKeys(processo.NumeroProcesso)
+        console.log('inserindo valor no input de captcha')
+        await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_trCaptcha"]/td[2]/div[1]/span[2]/input')).sendKeys(captcha)
+        await driver.sleep(1000)
+        console.log('Clicando na consulta')
+        await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_btnConsultarProcesso"]')).click()
+        await driver.sleep(1000)
+        await driver.wait(this.esperaAbrirProcesso(), 30000)
+      } catch {
+        tentativas++
+        if (tentativas <= 3) {
+          console.log('Tentativa: ' + tentativas)
           await this.atualizarPagina()
-          throw 'Algo Errado Atualizando Pagina'
+          await this.abrirProcesso(processo)
+        } else {
+          console.log('Tentativas excedidas, pulando o processo')
+          throw new 'Erro no metodo abrirProcesso'
         }
       }
     } else {
-      await this.atualizarPagina()
-      throw new error('Algo Errado Atualizando Pagina')
+      tentativas++
+      if (tentativas <= 3) {
+        console.log('Tentativa: ' + tentativas)
+        await this.atualizarPagina()
+        await this.abrirProcesso(processo)
+      } else {
+        console.log('Tentativas excedidas, pulando o processo')
+        throw new 'Erro no metodo abrirProcesso'
+      }
     }
   },
   async verificaPaginaOk () {
@@ -137,30 +149,43 @@ export default {
     await driver.navigate().refresh()
   },
   async pegaAtualizacao (processo) {
-    return {
-      Id: processo.Id,
-      NumeroProcesso: processo.NumeroProcesso,
-      Atualizar: 0,
-      UF: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUF"]')).getText() || null,
-      Nup: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNup"]')).getText() || null,
-      Area: await (await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText()).replace(',', '.') || null,
-      Ativo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblAtivo"]')).getText() === 'Sim' ? true : false,
-      FaseId: await this.fasesPorNome(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoFase"]')).getText()),
-      Eventos: await this.trataEventos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]/tbody/tr')), processo),
-      PessoasRelacionadas: await this.tratarPessoasRelacionadas(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridPessoas"]/tbody/tr')), processo),
-      Titulos: await this.tratarTitulos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridTitulos"]/tbody/tr')), processo),
-      Substancias: await this.tratarSubstancias(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridSubstancias"]/tbody/tr')), processo),
-      Municipios: await this.tratarMunicipios(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridMunicipios"]/tbody/tr')), processo),
-      CondicoesPropriedadeSolo: await this.tratarCondicoesPropriedadeSolo(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridHistoricoPropriedadeSolo"]/tbody/tr')), processo),
-      ProcessosAssociados: await this.tratarProcessosAssociados(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridProcessosAssociados"]/tbody/tr')), processo),
-      DocumentosProcesso: await this.tratarDocumentosProcesso(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridDocumentos"]/tbody/tr')), processo),
-      DataProtocolo: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataProtocolo"]')).getText()),
-      DataPrioridade: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataPrioridade"]')).getText()),
-      Superintendencia: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDistrito"]')).getText() || null,
-      TipoRequerimento: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoRequerimento"]')).getText() || null,
-      NumeroCadastroEmpresa: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNumeroProcessoCadastroEmpresa"]')).getText() || null,
-      UnidadeProtocolizadora: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUnidadeProtocolizadora"]')).getText() || null
+    let retorno = {}
+    try {
+      retorno = {
+        Id: processo.Id,
+        NumeroProcesso: processo.NumeroProcesso,
+        Atualizar: 0,
+        UF: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUF"]')).getText() || null,
+        Nup: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNup"]')).getText() || null,
+        Area: await (await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblArea"]')).getText()).replace(',', '.') || null,
+        Ativo: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblAtivo"]')).getText() === 'Sim' ? true : false,
+        FaseId: await this.fasesPorNome(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoFase"]')).getText()),
+        Eventos: await this.trataEventos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridEventos"]/tbody/tr')), processo),
+        PessoasRelacionadas: await this.tratarPessoasRelacionadas(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridPessoas"]/tbody/tr')), processo),
+        Titulos: await this.tratarTitulos(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridTitulos"]/tbody/tr')), processo),
+        Substancias: await this.tratarSubstancias(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridSubstancias"]/tbody/tr')), processo),
+        Municipios: await this.tratarMunicipios(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridMunicipios"]/tbody/tr')), processo),
+        CondicoesPropriedadeSolo: await this.tratarCondicoesPropriedadeSolo(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridHistoricoPropriedadeSolo"]/tbody/tr')), processo),
+        ProcessosAssociados: await this.tratarProcessosAssociados(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridProcessosAssociados"]/tbody/tr')), processo),
+        DocumentosProcesso: await this.tratarDocumentosProcesso(await driver.findElements(By.xpath('//*[@id="ctl00_conteudo_gridDocumentos"]/tbody/tr')), processo),
+        DataProtocolo: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataProtocolo"]')).getText()),
+        DataPrioridade: await utils.formataData(await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDataPrioridade"]')).getText()),
+        Superintendencia: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblDistrito"]')).getText() || null,
+        TipoRequerimento: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblTipoRequerimento"]')).getText() || null,
+        NumeroCadastroEmpresa: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblNumeroProcessoCadastroEmpresa"]')).getText() || null,
+        UnidadeProtocolizadora: await driver.findElement(By.xpath('//*[@id="ctl00_conteudo_lblUnidadeProtocolizadora"]')).getText() || null
+      }
+    } catch {
+      tentativas++
+      if (tentativas <= 3) {
+        console.log('Tentativa: ' + tentativas)
+        await this.pegaAtualizacao()
+      } else {
+        console.log('Tentativas excedidas, pulando o processo')
+        throw new 'Erro no metodo pegaAtualizacao'
+      }
     }
+    return retorno
   },
   async fasesPorNome (faseAtual) {
     let fase = await http.fasesPorNome(faseAtual)
