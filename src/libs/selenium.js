@@ -6,9 +6,13 @@ import utils from './utils'
 let driver = null
 let atualizacoes = []
 let tentativas = 0
-
+let parametro = {}
 export default {
+  async CarregaDependencias () {
+    parametro = await http.pegaParametrosUsuario()
+  },
   async start () {
+    await this.CarregaDependencias()
     if (await this.abrePagina()) {
       console.log('Página carregada')
       let processosAtualizar = await http.pegaProcessosParaAtualizar()
@@ -16,6 +20,7 @@ export default {
         console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
         console.log('------------------------------------------------------------------------------------------------------')
         for (let processo of processosAtualizar) {
+          tentativas = 0
           try {
             await this.abrirProcesso(processo)
             await this.atualizarProcesso(processo)
@@ -83,7 +88,8 @@ export default {
   async pegaCaptcha () {
     try {
       let base64 = await driver.executeScript(script)
-      return await driver.wait(humanCoder.base64ToCaptcha(base64), 15000)
+      if (parametro.ApiCaptcha == 0) return await driver.wait(humanCoder.base64ToCaptchaAntigo(base64), 15000)
+      else if (parametro.ApiCaptcha == 1) return await driver.wait(humanCoder.base64ToCaptchaNovo(base64), 15000)
     } catch {
       console.log('Algo Errado no metodo pegaCaptcha')
       throw new 'Erro no metodo pegaCaptcha'

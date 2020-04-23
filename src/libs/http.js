@@ -36,5 +36,13 @@ export default {
       data: atualizacao,
       headers: { Authorization: 'Bearer ' + token }
     }).then(response => {return response.data})
+  },
+  async pegaParametrosUsuario () {
+    var token  = await utils.authenticate();
+    return axios({
+      method: 'get',
+      url: 'http://localhost:59420/api/ParametroUsuario/BuscarParametro',
+      headers: { Authorization: 'Bearer ' + token }
+    }).then(response => {return response.data})
   }
 }
