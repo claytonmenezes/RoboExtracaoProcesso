@@ -8,16 +8,13 @@ let atualizacoes = []
 let tentativas = 0
 let parametro = {}
 export default {
-  async CarregaDependencias () {
-    parametro = await http.pegaParametrosUsuario()
-  },
   async start () {
     await this.CarregaDependencias()
     if (await this.abrePagina()) {
       console.log('Página carregada')
       let processosAtualizar = await http.pegaProcessosParaAtualizar()
       if (processosAtualizar.length) {
-        console.log('Foram encontrados ' + processosAtualizar.length + ' para atualização')
+        console.log('Foram encontrados ' + processosAtualizar.length + ' processos para atualização')
         console.log('------------------------------------------------------------------------------------------------------')
         for (let processo of processosAtualizar) {
           tentativas = 0
@@ -62,6 +59,9 @@ export default {
     console.log('Fechando a Pagina e zerando o WebDriver')
     await driver.quit();
     driver = null
+  },
+  async CarregaDependencias () {
+    parametro = await http.pegaParametrosUsuario()
   },
   async atualizarProcesso (processo) {
     try {
